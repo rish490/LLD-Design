@@ -1,0 +1,344 @@
+#include <bits/stdc++.h>
+using namespace std;
+class Stock
+{
+    public:
+    string name;
+    int id;
+    int price;
+    public:
+    Stock(string name,int price){
+        this->name=name;
+        this->price=price;
+        id=rand()*100000;
+
+    }
+
+};
+class Order;
+class Mapper;
+class OrderValidator;
+class Exchange;
+class NseStockMgr;
+class BseStockMgr;
+
+class User
+{
+    
+    public:
+    int id;
+    int wallet;
+    string name;
+    vector<Order*> placedOrders; //isko public karne ka man nhi 
+    User(int wallet,string name){
+        id=rand()*100000;
+        this->name=name;
+        this->wallet=wallet;
+        
+    }
+    void addBalance(int money){
+        wallet+=money;
+    }
+    
+};
+class StockMgr //singleton 
+{
+public:
+StockMgr(){}
+map<Stock *, int> marketContents;  //dont want to make this public yar 
+    
+    virtual int leftQuantity(Stock *stock) = 0;
+    virtual void decrementQuantity(Stock *stock, int quantity) = 0;
+};
+
+class NseStockMgr : public StockMgr
+{
+    NseStockMgr(){}
+    NseStockMgr(NseStockMgr* nse){}
+    static NseStockMgr* nseStockMgr;
+public:
+static NseStockMgr* getStockNseMgr();
+    int leftQuantity(Stock *stock)
+    {
+        return marketContents[stock];
+    }
+    void decrementQuantity(Stock *stock, int quantity)
+    {
+        marketContents[stock] -= quantity;
+        return;
+    }
+};
+class BseStockMgr : public StockMgr
+{
+    BseStockMgr(){}
+    BseStockMgr(BseStockMgr* bse){}
+    static BseStockMgr* bseStockMgr;
+public:
+static BseStockMgr* getStockBseMgr();
+    int leftQuantity(Stock *stock)
+    {
+        return marketContents[stock];
+    }
+    void decrementQuantity(Stock *stock, int quantity)
+    {
+        marketContents[stock] -= quantity;
+        return;
+    }
+};
+
+class Mapper //singleton
+{
+     map<int, User *> users;
+     map<string, Exchange *> exchanges;
+     map<int, Stock *> stocks;
+    static Mapper* mapper;
+    Mapper(Mapper* mapper){}
+    Mapper(){}
+    public:
+    static Mapper* getMapper();
+    void addUser(int id,User* user){
+        users[id]=user;
+    }
+    void addExchanges(string& exchange,Exchange* exch){
+        exchanges[exchange]=exch;
+    }
+    void addStocks(int id,Stock* stock){
+        stocks[id]=stock;
+    }
+    Stock* getStock(int id){
+        return stocks[id];
+    }
+    User* getUser(int id){
+        return users[id];
+    }
+    Exchange* getExchange(string name){
+        return exchanges[name];
+    }
+};
+
+class Order
+{
+    public:
+    int id;
+    int cost;
+    
+    
+    string exchangeName;
+     vector<pair<int, int>> cart; // stock id, quantity
+    Order(vector<pair<int,int>>&cart,string exchangeName){
+        this->exchangeName=exchangeName;
+        this->cart=cart;
+        cost=0;
+        Mapper* mapper=Mapper::getMapper();
+        for(int i=0;i<cart.size();i++){
+            //stock,quantity
+            //int currentStockTotalPrice=cart[i].first*cart[i].second;
+            Stock* currentStock=mapper->getStock(cart[i].first);
+            int currentStockTotalPrice=currentStock->price*cart[i].second;
+            cost+=currentStockTotalPrice;
+        }
+        id=rand()*1000000;
+
+    }
+};
+class Exchange
+{
+public:
+    string name;
+    virtual void updateQuantities(Order *order) = 0;
+};
+class NseExchange : public Exchange
+{
+    public:
+    NseExchange(string name){
+        this->name=name;
+    }
+    void updateQuantities(Order *order)
+    {
+        NseStockMgr* nseStockMgr=NseStockMgr::getStockNseMgr();
+        Mapper* mapper=Mapper::getMapper();
+        vector<pair<int,int>>temp=order->cart;
+        for(int i=0;i<temp.size();i++){
+            Stock* currentStock=mapper->getStock(temp[i].first);
+            nseStockMgr->decrementQuantity(currentStock,temp[i].second);
+        }
+    }
+};
+class BseExchange : public Exchange
+{
+    public:
+    BseExchange(string name){
+        this->name=name;
+    }
+    void updateQuantities(Order *order)
+    {
+        BseStockMgr* bseStockMgr=BseStockMgr::getStockBseMgr();
+        Mapper* mapper=Mapper::getMapper();
+        for(int i=0;i<order->cart.size();i++){
+            Stock* currentStock=mapper->getStock(order->cart[i].first);
+            bseStockMgr->decrementQuantity(currentStock,order->cart[i].second);
+        }
+    }
+};
+
+
+
+class ExchangeMgr
+{
+    static ExchangeMgr* exchangeMgr;
+    ExchangeMgr(){}
+    ExchangeMgr(ExchangeMgr* exchangeMgr){}
+
+public:
+static ExchangeMgr* getExchangeMgr();
+    bool connectToExchange(Order *order)
+    {
+        Mapper* mapper=Mapper::getMapper();
+        if(order->exchangeName=="NSE"){
+            NseStockMgr* nseStockMgr=NseStockMgr::getStockNseMgr();
+            for(int i=0;i<order->cart.size();i++){
+                Stock* currentStock=mapper->getStock(order->cart[i].first);
+                nseStockMgr->decrementQuantity(currentStock,order->cart[i].second);
+            }
+        }
+        else{
+            BseStockMgr* bseStockMgr=BseStockMgr::getStockBseMgr();
+            for(int i=0;i<order->cart.size();i++){
+                Stock* currentStock=mapper->getStock(order->cart[i].first);
+                bseStockMgr->decrementQuantity(currentStock,order->cart[i].second);
+            }
+        }
+        return true;
+    }
+};
+ExchangeMgr* ExchangeMgr::exchangeMgr=NULL;
+ExchangeMgr* ExchangeMgr::getExchangeMgr(){
+    if(exchangeMgr==NULL){
+        exchangeMgr=new ExchangeMgr();
+    }
+    return exchangeMgr;
+}
+
+class OrderValidator
+{
+public:
+    static bool validate(int userId, Order *order)
+    {
+        
+        NseStockMgr* nseStockMgr=NseStockMgr::getStockNseMgr();
+        BseStockMgr* bseStockMgr=BseStockMgr::getStockBseMgr();
+        Mapper* mapper=Mapper::getMapper();
+        User* user=mapper->getUser(userId);
+        if(order->exchangeName=="NSE"){
+            
+                for(int i=0;i<order->cart.size();i++){
+                    Stock* currentStock=mapper->getStock(order->cart[i].first);
+
+                    if(nseStockMgr->marketContents[currentStock]<order->cart[i].second){
+                        return false;
+                    }
+                    
+                }
+                if(order->cost>user->wallet){
+                    return false;
+                }
+                
+            }
+            else{
+                for(int i=0;i<order->cart.size();i++){
+                    Stock* currentStock=mapper->getStock(order->cart[i].first);
+
+                    if(bseStockMgr->marketContents[currentStock]<order->cart[i].second){
+                        return false;
+                    }
+                    
+                }
+                if(order->cost>user->wallet){
+                    return false;
+                }
+               
+            }
+            return true;
+    }
+};
+Mapper* Mapper::mapper=NULL;
+Mapper* Mapper::getMapper(){
+    if(mapper==NULL){
+        mapper=new Mapper();
+        
+    }
+    return mapper;
+}
+NseStockMgr* NseStockMgr::nseStockMgr=NULL;
+NseStockMgr* NseStockMgr::getStockNseMgr(){
+    if(nseStockMgr==NULL){
+        nseStockMgr=new NseStockMgr(); 
+    }
+    return nseStockMgr;
+}
+BseStockMgr* BseStockMgr::bseStockMgr=NULL;
+BseStockMgr* BseStockMgr::getStockBseMgr(){
+    if(bseStockMgr==NULL){
+        bseStockMgr=new BseStockMgr(); 
+    }
+    return bseStockMgr;
+}
+class OrderMgr
+{
+    vector<Order *> orders;
+    static OrderMgr* orderMgr;
+    OrderMgr(){}
+    OrderMgr(OrderMgr* orderMgr){}
+public:
+static OrderMgr* getOrderMgr();
+    bool placeOrder(int userId, Order *order)
+    {
+        // if order successful then only push in orders list
+        
+        if (OrderValidator::validate(userId, order) == true)
+        {
+            
+            // first check will be if saare items jo order me honge unki quantity itni hogi atleast nse bse ke pas
+            // fir jo order ki cost hai utni user ke waalet me honi chahie total
+            ExchangeMgr* exchangeMgr=ExchangeMgr::getExchangeMgr();
+            exchangeMgr->connectToExchange(order);
+            Mapper* mapper=Mapper::getMapper();
+            User* user=mapper->getUser(userId);
+            user->placedOrders.push_back(order);
+            user->wallet-=order->cost;
+            return true;
+        }
+        return false;
+    }
+};
+OrderMgr* OrderMgr::orderMgr=NULL;
+OrderMgr* OrderMgr::getOrderMgr(){
+    if(orderMgr==NULL){
+        orderMgr=new OrderMgr();
+    }
+    return orderMgr;
+}
+
+int main(){
+    User* user=new User(16000,"Rishabh");
+    Mapper* mapper=Mapper::getMapper();
+    mapper->addUser(user->id,user);
+    Stock* hcl=new Stock("hcl",1000);
+    Stock* mrf=new Stock("mrf",3000);
+    mapper->addStocks(hcl->id,hcl);
+    mapper->addStocks(mrf->id,mrf);
+    NseExchange* nse=new NseExchange("NSE");
+    BseExchange* bse=new BseExchange("BSE");
+    mapper->addExchanges(nse->name,nse);
+    mapper->addExchanges(bse->name,bse);
+    vector<pair<int,int>>cart;
+    cart.push_back({hcl->id,3});
+    cart.push_back({mrf->id,3});
+    Order* order=new Order(cart,nse->name);
+    NseStockMgr* nseStockMgr=NseStockMgr::getStockNseMgr();
+    nseStockMgr->marketContents[hcl]=56;
+    nseStockMgr->marketContents[mrf]=10;
+    OrderMgr* orderMgr=OrderMgr::getOrderMgr();
+    cout<<orderMgr->placeOrder(user->id,order);
+    return 0;
+}
